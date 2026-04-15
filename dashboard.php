@@ -1,16 +1,18 @@
 <?php
 session_start();
+
 if (!isset($_SESSION['user_id'])) {
     header("Location: index.php");
     exit;
 }
+
+$nama = isset($_SESSION['nama']) ? $_SESSION['nama'] : 'USER';
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
-<title>
- DASHBOARD</title>
+<title>DASHBOARD</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -18,7 +20,7 @@ if (!isset($_SESSION['user_id'])) {
 
 <style>
 
-/* ===== GLOBAL DARK MATRIX ===== */
+/* ===== BACKGROUND ===== */
 body{
     margin:0;
     overflow:hidden;
@@ -27,7 +29,7 @@ body{
     font-family:Arial;
 }
 
-/* ===== GRID FLOOR ===== */
+/* GRID */
 .grid{
     position:fixed;
     width:100%;
@@ -47,7 +49,7 @@ body{
     to{transform: perspective(500px) rotateX(60deg) translateY(60px);}
 }
 
-/* ===== SCANLINES ===== */
+/* SCANLINE */
 .scanline{
     position:fixed;
     width:100%;
@@ -55,20 +57,18 @@ body{
     background: repeating-linear-gradient(
         to bottom,
         rgba(255,0,0,0.05),
-        rgba(255,0,0,0.05) 1px,
         transparent 2px,
         transparent 4px
     );
     z-index:-2;
-    pointer-events:none;
 }
 
-/* ===== GLITCH TITLE ===== */
+/* TITLE */
 .title{
     font-size:40px;
     text-transform:uppercase;
-    position:relative;
     animation:glitch 1.5s infinite;
+    text-align:center;
 }
 
 @keyframes glitch{
@@ -79,7 +79,7 @@ body{
     100%{text-shadow:2px 0 red,-2px 0 blue;}
 }
 
-/* ===== HUD TOP BAR ===== */
+/* HUD */
 .hud{
     position:fixed;
     top:0;
@@ -92,7 +92,7 @@ body{
     backdrop-filter:blur(10px);
 }
 
-/* ===== CARDS FINAL BOSS ===== */
+/* CARD */
 .cardx{
     background:rgba(255,0,0,0.05);
     border:1px solid rgba(255,0,0,0.4);
@@ -110,7 +110,7 @@ body{
 }
 
 .cardx:hover{
-    transform:scale(1.08) rotateX(5deg);
+    transform:scale(1.08);
     box-shadow:0 0 40px red;
 }
 
@@ -127,26 +127,16 @@ body{
     50%{transform:translateY(-10px);}
 }
 
-/* BUTTON MAGNETIC */
+/* BUTTON */
 .btnx{
     background:red;
     border:none;
     transition:0.2s;
-    position:relative;
-    overflow:hidden;
 }
 
 .btnx:hover{
     transform:scale(1.1);
     box-shadow:0 0 25px red;
-}
-
-/* PARTICLE CANVAS */
-canvas{
-    position:fixed;
-    top:0;
-    left:0;
-    z-index:-4;
 }
 
 /* INTRO */
@@ -171,7 +161,6 @@ canvas{
 .boot{
     color:red;
     font-size:20px;
-    letter-spacing:3px;
     animation:blink 0.5s infinite;
 }
 
@@ -184,100 +173,64 @@ canvas{
 
 <body>
 
-<!-- INTRO BOOT -->
+<!-- INTRO -->
 <div id="intro">
     <div class="boot">SYSTEM BOOTING...</div>
-    <div class="boot">INITIALIZING DASHBOARD...</div>
-    <div class="boot">WELCOME <?= $_SESSION['nama']; ?></div>
+    <div class="boot">LOADING DASHBOARD...</div>
+    <div class="boot">WELCOME <?= htmlspecialchars($nama); ?></div>
 </div>
 
 <div class="grid"></div>
 <div class="scanline"></div>
 
-<canvas id="bg"></canvas>
-
 <!-- HUD -->
 <div class="hud">
     <div>🔥 TOKO SYSTEM</div>
-    <div><?= $_SESSION['nama']; ?></div>
+    <div><?= htmlspecialchars($nama); ?></div>
 </div>
 
 <div class="container text-center" style="margin-top:120px;">
 
-    <h1 class="title"> DASHBOARD</h1>
+<h1 class="title">DASHBOARD</h1>
 
-    <div class="row mt-5 g-4">
+<div class="row mt-5 g-4">
 
-        <div class="col-md-4">
-            <div class="cardx">
-                <i class="bi bi-box icon"></i>
-                <h5>PRODUCTS</h5>
-                <a href="produk.php" class="btn btnx w-100 mt-2">ENTER</a>
-            </div>
+    <div class="col-md-3">
+        <div class="cardx">
+            <i class="bi bi-box icon"></i>
+            <h5>PRODUCTS</h5>
+            <a href="produk.php" class="btn btnx w-100 mt-2">ENTER</a>
         </div>
-
-        <div class="col-md-4">
-            <div class="cardx">
-                <i class="bi bi-cart icon"></i>
-                <h5>CART</h5>
-                <a href="keranjang.php" class="btn btnx w-100 mt-2">ENTER</a>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="cardx">
-                <i class="bi bi-cash icon"></i>
-                <h5>PAYMENT</h5>
-                <a href="pembayaran.php" class="btn btnx w-100 mt-2">ENTER</a>
-            </div>
-        </div>
-
     </div>
+
+    <div class="col-md-3">
+        <div class="cardx">
+            <i class="bi bi-cart icon"></i>
+            <h5>CART</h5>
+            <a href="keranjang.php" class="btn btnx w-100 mt-2">ENTER</a>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="cardx">
+            <i class="bi bi-cash icon"></i>
+            <h5>PAYMENT</h5>
+            <a href="pembayaran.php" class="btn btnx w-100 mt-2">ENTER</a>
+        </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="col-md-3">
+        <div class="cardx">
+            <i class="bi bi-clock-history icon"></i>
+            <h5>HISTORY</h5>
+            <a href="history.php" class="btn btnx w-100 mt-2">ENTER</a>
+        </div>
+    </div>
+
 </div>
 
-<script>
-
-/* ===== PARTICLES ===== */
-const c = document.getElementById("bg");
-const x = c.getContext("2d");
-
-c.width = window.innerWidth;
-c.height = window.innerHeight;
-
-let p = [];
-
-for(let i=0;i<120;i++){
-    p.push({
-        x:Math.random()*c.width,
-        y:Math.random()*c.height,
-        r:Math.random()*2,
-        dx:(Math.random()-0.5),
-        dy:(Math.random()-0.5)
-    });
-}
-
-function draw(){
-    x.clearRect(0,0,c.width,c.height);
-    x.fillStyle="red";
-
-    p.forEach(v=>{
-        x.beginPath();
-        x.arc(v.x,v.y,v.r,0,Math.PI*2);
-        x.fill();
-
-        v.x+=v.dx;
-        v.y+=v.dy;
-
-        if(v.x<0||v.x>c.width)v.dx*=-1;
-        if(v.y<0||v.y>c.height)v.dy*=-1;
-    });
-
-    requestAnimationFrame(draw);
-}
-
-draw();
-
-</script>
+</div>
 
 </body>
 </html>
