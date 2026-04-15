@@ -1,222 +1,242 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 session_start();
-include "config/koneksi.php";
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: index.php");
-    exit;
-}
-
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
-
-$user_id = $_SESSION['user_id'];
-
+/* INIT CART */
 if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
-    $_SESSION['cart'] = [];
+    $_SESSION['cart'] = array();
 }
 
-/* =========================
-   HANDLE ADD TO CART
-========================= */
-if (isset($_POST['produk_id'], $_POST['qty'])) {
-
-    $produk_id = (int) $_POST['produk_id'];
-    $qty = (int) $_POST['qty'];
-
-    if ($qty < 1) $qty = 1;
-
-    $stmt = $conn->prepare("SELECT id, nama_produk, harga, stok FROM produk WHERE id=?");
-    $stmt->bind_param("i", $produk_id);
-    $stmt->execute();
-    $produk = $stmt->get_result()->fetch_assoc();
-
-    if ($produk) {
-
-        if (isset($_SESSION['cart'][$produk_id])) {
-            $_SESSION['cart'][$produk_id]['qty'] += $qty;
-        } else {
-            $_SESSION['cart'][$produk_id] = [
-                "id" => $produk['id'],
-                "nama" => $produk['nama_produk'],
-                "harga" => $produk['harga'],
-                "qty" => $qty
-            ];
-        }
-    }
-}
-
-/* =========================
-   CHECKOUT FIXED
-========================= */
-if (isset($_POST['checkout'])) {
-
-    $metode = $_POST['metode'] ?? 'cash';
-    $cart = $_SESSION['cart'];
-
-    if (empty($cart)) {
-        echo "<script>alert('Cart kosong!');window.location='keranjang.php';</script>";
-        exit;
-    }
-
-    $conn->begin_transaction();
-
-    try {
-
-        $total = 0;
-
-        foreach ($cart as $item) {
-
-            $id = (int)$item['id'];
-            $qty = (int)$item['qty'];
-
-            // ambil stok terbaru (ANTI BUG)
-            $stmt = $conn->prepare("SELECT stok FROM produk WHERE id=? FOR UPDATE");
-            $stmt->bind_param("i", $id);
-            $stmt->execute();
-            $stok = $stmt->get_result()->fetch_assoc()['stok'];
-
-            if ($stok < $qty) {
-                throw new Exception("Stok tidak cukup untuk produk ID: $id");
-            }
-
-            $subtotal = $item['harga'] * $qty;
-            $total += $subtotal;
-
-            // update stok
-            $stmt = $conn->prepare("UPDATE produk SET stok = stok - ? WHERE id = ?");
-            $stmt->bind_param("ii", $qty, $id);
-            $stmt->execute();
-        }
-
-        // insert transaksi
-        $stmt = $conn->prepare("
-            INSERT INTO transaksi (user_id, total, metode_pembayaran)
-            VALUES (?, ?, ?)
-        ");
-        $stmt->bind_param("ids", $user_id, $total, $metode);
-        $stmt->execute();
-
-        $conn->commit();
-        $_SESSION['cart'] = [];
-
-        echo "<script>
-            alert('TRANSAKSI BERHASIL ✔');
-            window.location='dashboard.php';
-        </script>";
-        exit;
-
-    } catch (Exception $e) {
-
-        $conn->rollback();
-
-        echo "<script>
-            alert('GAGAL: " . addslashes($e->getMessage()) . "');
-            window.location='keranjang.php';
-        </script>";
-        exit;
-    }
-}
-
-/* =========================
-   TOTAL SAFE CALC
-========================= */
+/* TOTAL */
 $total = 0;
+foreach ($_SESSION['cart'] as $item) {
+    $harga = isset($item['harga']) ? $item['harga'] : 0;
+    $qty   = isset($item['qty']) ? $item['qty'] : 0;
+    $total += $harga * $qty;
+}
 
-if (!empty($_SESSION['cart'])) {
-    foreach ($_SESSION['cart'] as $item) {
-        $total += $item['harga'] * $item['qty'];
+/* PROCESS PAYMENT */
+$success = false;
+
+if (isset($_POST['bayar'])) {
+
+    $metode = isset($_POST['metode']) ? $_POST['metode'] : 'cash';
+
+    if ($metode != 'cash' && $metode != 'transfer') {
+        $metode = 'cash';
     }
+
+    $_SESSION['last_total'] = $total;
+    $_SESSION['last_metode'] = $metode;
+
+    $_SESSION['cart'] = array();
+
+    $success = true;
 }
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
-<title>GOD MODE FIXED</title>
+<title>Payment System Ultra</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
 <style>
+
+/* BACKGROUND ENERGY */
 body{
-    background:black;
-    color:white;
+    margin:0;
     font-family:system-ui;
-}
-.glass{
-    background:rgba(255,255,255,0.05);
-    padding:20px;
-    border-radius:15px;
-    border:1px solid red;
-}
-.btn-red{
-    background:red;
+    background:radial-gradient(circle at top,#2a0000,#000);
     color:white;
+    overflow:hidden;
 }
+
+/* FLOATING LIGHT */
+.glow{
+    position:fixed;
+    width:500px;
+    height:500px;
+    background:red;
+    filter:blur(180px);
+    opacity:0.15;
+    animation:move 6s infinite ease-in-out;
+}
+
+@keyframes move{
+    50%{transform:translate(500px,300px) scale(1.2);}
+}
+
+/* CONFETTI */
+.confetti{
+    position:fixed;
+    width:8px;
+    height:8px;
+    background:red;
+    animation:fall 5s linear infinite;
+    opacity:0.7;
+}
+
+@keyframes fall{
+    0%{transform:translateY(-10vh) rotate(0);}
+    100%{transform:translateY(110vh) rotate(360deg);}
+}
+
+/* CARD */
+.card{
+    width:380px;
+    margin:80px auto;
+    padding:25px;
+    background:rgba(255,255,255,0.06);
+    border:1px solid red;
+    border-radius:20px;
+    text-align:center;
+    backdrop-filter:blur(20px);
+    animation:pop 0.8s ease;
+    box-shadow:0 0 40px rgba(255,0,0,0.2);
+}
+
+@keyframes pop{
+    from{transform:scale(0.3) rotate(-5deg);opacity:0;}
+    to{transform:scale(1) rotate(0);opacity:1;}
+}
+
+/* TITLE GLOW */
+h2{
+    animation:glowtext 2s infinite alternate;
+}
+
+@keyframes glowtext{
+    from{text-shadow:0 0 10px red;}
+    to{text-shadow:0 0 30px red;}
+}
+
+/* SUCCESS CHECK */
+.check{
+    font-size:80px;
+    color:lime;
+    animation:bounce 1s infinite alternate;
+    text-shadow:0 0 20px lime;
+}
+
+@keyframes bounce{
+    from{transform:translateY(0);}
+    to{transform:translateY(-12px);}
+}
+
+/* BUTTON */
+.btn{
+    display:block;
+    margin-top:15px;
+    padding:12px;
+    background:linear-gradient(90deg,#8b0000,#ff0000);
+    color:white;
+    text-decoration:none;
+    border:none;
+    width:100%;
+    cursor:pointer;
+    border-radius:10px;
+    transition:0.3s;
+}
+
+.btn:hover{
+    transform:scale(1.05);
+    box-shadow:0 0 25px red;
+}
+
+/* SELECT */
+select{
+    width:100%;
+    padding:12px;
+    margin:10px 0;
+    border-radius:10px;
+}
+
+/* SHAKE EFFECT ON SUCCESS */
+.shake{
+    animation:shake 0.5s;
+}
+
+@keyframes shake{
+    0%{transform:translateX(0);}
+    25%{transform:translateX(-10px);}
+    50%{transform:translateX(10px);}
+    75%{transform:translateX(-10px);}
+    100%{transform:translateX(0);}
+}
+
 </style>
 </head>
 
 <body>
 
-<div class="container py-4">
+<div class="glow"></div>
 
-<h3 class="text-center">🔥 CART SYSTEM FIXED</h3>
-
-<div class="glass mt-4">
-
-<?php if(empty($_SESSION['cart'])) { ?>
-
-    <p>Cart kosong</p>
-
-<?php } else { ?>
-
-<table class="table table-dark">
-<tr>
-    <th>Nama</th>
-    <th>Harga</th>
-    <th>Qty</th>
-    <th>Total</th>
-</tr>
-
-<?php foreach($_SESSION['cart'] as $item){ ?>
-<tr>
-    <td><?= $item['nama'] ?></td>
-    <td><?= number_format($item['harga']) ?></td>
-    <td><?= $item['qty'] ?></td>
-    <td class="text-danger">
-        <?= number_format($item['harga'] * $item['qty']) ?>
-    </td>
-</tr>
+<?php for($i=0;$i<35;$i++){ ?>
+<div class="confetti" style="
+left:<?= rand(0,100) ?>%;
+animation-delay:<?= rand(0,5) ?>s;
+background:<?= ['red','white','gold','lime'][rand(0,3)] ?>;
+"></div>
 <?php } ?>
 
-</table>
+<?php if(!$success) { ?>
 
-<h4 class="text-danger text-end">
-TOTAL: Rp <?= number_format($total) ?>
-</h4>
+<!-- ================= PAYMENT FORM ================= -->
+<div class="card">
 
-<?php } ?>
+<h2>CHECKOUT PAYMENT</h2>
 
-</div>
-
-<div class="glass mt-3">
+<p>Total Belanja</p>
+<h3 style="color:red;">Rp <?= number_format($total,0,',','.') ?></h3>
 
 <form method="POST">
 
-<select name="metode" class="form-control mb-3">
-    <option value="cash">Cash</option>
-    <option value="transfer">Transfer</option>
+<select name="metode" required>
+    <option value="cash">Cash 💵</option>
+    <option value="transfer">Transfer 🏦</option>
 </select>
 
-<button class="btn btn-red w-100" name="checkout">
-BAYAR
+<button class="btn" name="bayar">
+    BAYAR SEKARANG
 </button>
 
 </form>
 
 </div>
 
+<?php } else { 
+
+$metode = isset($_SESSION['last_metode']) ? $_SESSION['last_metode'] : 'cash';
+$total2 = isset($_SESSION['last_total']) ? $_SESSION['last_total'] : 0;
+
+unset($_SESSION['last_metode']);
+unset($_SESSION['last_total']);
+
+?>
+
+<!-- ================= SUCCESS ================= -->
+<div class="card shake">
+
+<div class="check">✔</div>
+
+<h2>PAYMENT SUCCESS</h2>
+
+<p>Metode: <b><?= strtoupper($metode) ?></b></p>
+
+<p>Total: <b style="color:red;">
+Rp <?= number_format($total2,0,',','.') ?>
+</b></p>
+
+<p>Transaksi berhasil 🎉</p>
+
+<a class="btn" href="produk.php">BELANJA LAGI</a>
+
 </div>
+
+<?php } ?>
 
 </body>
 </html>
