@@ -7,88 +7,214 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// ambil cart dari session
-$cart = isset($_SESSION['cart']) ? $_SESSION['cart'] : [];
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-// hitung total dari session
-$total = 0;
-foreach ($cart as $item) {
-    $total += $item['harga'] * $item['qty'];
+$user_id = $_SESSION['user_id'];
+
+if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
+    $_SESSION['cart'] = [];
 }
 
-// proses bayar
-if (isset($_POST['bayar'])) {
+/* =========================
+   HANDLE ADD TO CART
+========================= */
+if (isset($_POST['produk_id'], $_POST['qty'])) {
 
-    $metode = $_POST['metode'];
-    $user_id = $_SESSION['user_id'];
+    $produk_id = (int) $_POST['produk_id'];
+    $qty = (int) $_POST['qty'];
 
-    // simpan transaksi
-    mysqli_query($conn, "
-        INSERT INTO transaksi (user_id, total, metode_pembayaran)
-        VALUES ($user_id, $total, '$metode')
-    ");
+    if ($qty < 1) $qty = 1;
 
-    // kosongkan cart session
-    unset($_SESSION['cart']);
+    $stmt = $conn->prepare("SELECT id, nama_produk, harga, stok FROM produk WHERE id=?");
+    $stmt->bind_param("i", $produk_id);
+    $stmt->execute();
+    $produk = $stmt->get_result()->fetch_assoc();
 
-    echo "<script>
-        alert('Pembayaran berhasil!');
-        window.location='dashboard.php';
-    </script>";
-    exit;
+    if ($produk) {
+
+        if (isset($_SESSION['cart'][$produk_id])) {
+            $_SESSION['cart'][$produk_id]['qty'] += $qty;
+        } else {
+            $_SESSION['cart'][$produk_id] = [
+                "id" => $produk['id'],
+                "nama" => $produk['nama_produk'],
+                "harga" => $produk['harga'],
+                "qty" => $qty
+            ];
+        }
+    }
+}
+
+/* =========================
+   CHECKOUT FIXED
+========================= */
+if (isset($_POST['checkout'])) {
+
+    $metode = $_POST['metode'] ?? 'cash';
+    $cart = $_SESSION['cart'];
+
+    if (empty($cart)) {
+        echo "<script>alert('Cart kosong!');window.location='keranjang.php';</script>";
+        exit;
+    }
+
+    $conn->begin_transaction();
+
+    try {
+
+        $total = 0;
+
+        foreach ($cart as $item) {
+
+            $id = (int)$item['id'];
+            $qty = (int)$item['qty'];
+
+            // ambil stok terbaru (ANTI BUG)
+            $stmt = $conn->prepare("SELECT stok FROM produk WHERE id=? FOR UPDATE");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $stok = $stmt->get_result()->fetch_assoc()['stok'];
+
+            if ($stok < $qty) {
+                throw new Exception("Stok tidak cukup untuk produk ID: $id");
+            }
+
+            $subtotal = $item['harga'] * $qty;
+            $total += $subtotal;
+
+            // update stok
+            $stmt = $conn->prepare("UPDATE produk SET stok = stok - ? WHERE id = ?");
+            $stmt->bind_param("ii", $qty, $id);
+            $stmt->execute();
+        }
+
+        // insert transaksi
+        $stmt = $conn->prepare("
+            INSERT INTO transaksi (user_id, total, metode_pembayaran)
+            VALUES (?, ?, ?)
+        ");
+        $stmt->bind_param("ids", $user_id, $total, $metode);
+        $stmt->execute();
+
+        $conn->commit();
+        $_SESSION['cart'] = [];
+
+        echo "<script>
+            alert('TRANSAKSI BERHASIL ✔');
+            window.location='dashboard.php';
+        </script>";
+        exit;
+
+    } catch (Exception $e) {
+
+        $conn->rollback();
+
+        echo "<script>
+            alert('GAGAL: " . addslashes($e->getMessage()) . "');
+            window.location='keranjang.php';
+        </script>";
+        exit;
+    }
+}
+
+/* =========================
+   TOTAL SAFE CALC
+========================= */
+$total = 0;
+
+if (!empty($_SESSION['cart'])) {
+    foreach ($_SESSION['cart'] as $item) {
+        $total += $item['harga'] * $item['qty'];
+    }
 }
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Pembayaran</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<title>GOD MODE FIXED</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<style>
+body{
+    background:black;
+    color:white;
+    font-family:system-ui;
+}
+.glass{
+    background:rgba(255,255,255,0.05);
+    padding:20px;
+    border-radius:15px;
+    border:1px solid red;
+}
+.btn-red{
+    background:red;
+    color:white;
+}
+</style>
 </head>
 
-<body class="bg-light">
+<body>
 
-<div class="container py-5">
+<div class="container py-4">
 
-    <div class="row justify-content-center">
-        <div class="col-md-6">
+<h3 class="text-center">🔥 CART SYSTEM FIXED</h3>
 
-            <div class="card mb-3">
-                <div class="card-body text-center">
-                    <h5>Total Pembayaran</h5>
-                    <h2 class="text-success">
-                        Rp <?= number_format($total,0,',','.'); ?>
-                    </h2>
-                </div>
-            </div>
+<div class="glass mt-4">
 
-            <div class="card">
-                <div class="card-body">
+<?php if(empty($_SESSION['cart'])) { ?>
 
-                    <form method="POST">
+    <p>Cart kosong</p>
 
-                        <label>
-                            <input type="radio" name="metode" value="cash" checked>
-                            Cash
-                        </label><br><br>
+<?php } else { ?>
 
-                        <label>
-                            <input type="radio" name="metode" value="transfer">
-                            Transfer
-                        </label><br><br>
+<table class="table table-dark">
+<tr>
+    <th>Nama</th>
+    <th>Harga</th>
+    <th>Qty</th>
+    <th>Total</th>
+</tr>
 
-                        <button class="btn btn-success w-100" type="submit" name="bayar">
-                            Bayar Sekarang
-                        </button>
+<?php foreach($_SESSION['cart'] as $item){ ?>
+<tr>
+    <td><?= $item['nama'] ?></td>
+    <td><?= number_format($item['harga']) ?></td>
+    <td><?= $item['qty'] ?></td>
+    <td class="text-danger">
+        <?= number_format($item['harga'] * $item['qty']) ?>
+    </td>
+</tr>
+<?php } ?>
 
-                    </form>
+</table>
 
-                </div>
-            </div>
+<h4 class="text-danger text-end">
+TOTAL: Rp <?= number_format($total) ?>
+</h4>
 
-        </div>
-    </div>
+<?php } ?>
+
+</div>
+
+<div class="glass mt-3">
+
+<form method="POST">
+
+<select name="metode" class="form-control mb-3">
+    <option value="cash">Cash</option>
+    <option value="transfer">Transfer</option>
+</select>
+
+<button class="btn btn-red w-100" name="checkout">
+BAYAR
+</button>
+
+</form>
+
+</div>
 
 </div>
 
